@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0a0a0a">
+    <title>Qwen Coder Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        * {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        /* Mobile viewport fix */
+        html, body {
+            height: 100%;
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+        }
+        
+        /* Code blocks */
+        .code-container { 
+            position: relative; 
+            background: #1a1a1a; 
+            border-radius: 8px; 
+            border: 1px solid #2a2a2a; 
+            margin: 16px 0;
+            overflow: hidden;
+        }
+        
+        .code-header {
+            background: #0f0f0f;
+            border-bottom: 1px solid #2a2a2a;
+            padding: 10px 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .copy-btn { 
+            background: transparent;
+            color: #888;
+            font-size: 12px;
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid #333;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+        
+        .copy-btn:hover { 
+            background: #2a2a2a;
+            color: #fff;
+            border-color: #444;
+        }
+        
+        .copy-btn:active {
+            transform: scale(0.95);
+        }
+        
+        pre { 
+            padding: 16px; 
+            overflow-x: auto; 
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Courier New', monospace;
+            color: #e4e4e7;
+            font-size: 13px;
+            line-height: 1.6;
+            margin: 0;
+        }
+        
+        /* Scrollbars */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #444; }
+        
+        /* Animations */
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .message-bubble {
+            animation: slideUp 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Mobile sidebar */
+        .sidebar-overlay { 
+            position: fixed; 
+            inset: 0; 
+            background: rgba(0,0,0,0.6); 
+            z-index: 40;
+            backdrop-filter: blur(4px);
+            transition: opacity 0.2s;
+        }
+        
+        .sidebar { 
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                left: 0;
+                top: 0;
+                bottom: 0;
+                z-index: 50;
+                transform: translateX(-100%);
+                box-shadow: 4px 0 12px rgba(0,0,0,0.3);
+            }
+            .sidebar.open {
+                transform: translateX(0);
+            }
+        }
+        
+        /* Improved textarea for mobile */
+        textarea {
+            -webkit-appearance: none;
+            appearance: none;
+            resize: none;
+            font-size: 16px !important; /* Prevents zoom on iOS */
+        }
+        
+        /* Selection color */
+        ::selection {
+            background: #3b82f6;
+            color: white;
+        }
+        
+        /* Loading dots animation */
+        @keyframes blink {
+            0%, 20% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+        
+        .loading-dot {
+            animation: blink 1.4s infinite;
+        }
+        
+        .loading-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        
+        .loading-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        /* Skeleton loader */
+        .skeleton {
+            background: linear-gradient(90deg, #1a1a1a 25%, #252525 50%, #1a1a1a 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        /* Mobile-specific fixes */
+        @media (max-width: 768px) {
+            /* Ensure main content area is properly sized */
+            .main-container {
+                height: 100vh;
+                height: 100dvh; /* Dynamic viewport height for mobile browsers */
+                display: flex;
+                flex-direction: column;
+            }
+
+            /* Chat window should be scrollable */
+            #chat-window {
+                flex: 1;
+                overflow-y: auto;
+                overflow-x: hidden;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            /* Input area should stay at bottom */
+            .input-container {
+                flex-shrink: 0;
+                position: relative;
+                z-index: 10;
+            }
+        }
+    </style>
+</head>
+<body class="bg-[#0a0a0a] text-zinc-200 antialiased">
+
+    <!-- Sidebar Overlay (mobile) -->
+    <div id="sidebar-overlay" class="sidebar-overlay hidden md:hidden" onclick="toggleSidebar()"></div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar w-64 bg-[#0f0f0f] border-r border-zinc-800/50 flex flex-col h-full">
+        <!-- Sidebar Header -->
+        <div class="p-4 border-b border-zinc-800/50">
+            <div class="flex items-center justify-between mb-3">
+                <h1 class="text-white font-semibold text-base">Qwen Coder</h1>
+                <button onclick="toggleSidebar()" class="md:hidden text-zinc-500 hover:text-white transition">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            
+            <!-- Model Selection -->
+            <div class="mb-3">
+                <label class="text-xs text-zinc-500 font-medium mb-1.5 block">Model</label>
+                <div class="relative">
+                    <select id="model-select" onchange="changeModel()" class="w-full bg-zinc-800/50 border border-zinc-700/50 text-white py-2.5 px-3 pr-8 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition cursor-pointer hover:bg-zinc-800 appearance-none">
+                        <option value="">Loading...</option>
+                    </select>
+                    <svg class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                </div>
+                <button onclick="refreshModels()" class="mt-2 text-xs text-zinc-500 hover:text-zinc-300 transition flex items-center gap-1">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                    </svg>
+                    Refresh models
+                </button>
+            </div>
+            
+            <button onclick="createNewChat()" class="w-full bg-zinc-800/50 hover:bg-zinc-800 text-white py-2.5 px-3 rounded-lg transition text-sm font-medium border border-zinc-700/50 hover:border-zinc-600 active:scale-[0.98]">
+                <span class="flex items-center justify-center gap-2">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    New Chat
+                </span>
+            </button>
+        </div>
+        
+        <!-- Chat List -->
+        <div id="chat-list" class="flex-1 overflow-y-auto p-2">
+            <!-- Chat items will be inserted here -->
+        </div>
+        
+        <!-- Status Indicator (desktop) -->
+        <div class="hidden md:block p-4 border-t border-zinc-800/50">
+            <div id="status-indicator-desktop" class="flex items-center gap-2 text-xs text-zinc-500">
+                <div class="w-2 h-2 rounded-full bg-zinc-600" id="status-dot-desktop"></div>
+                <span id="status-text-desktop">Checking...</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 main-container md:flex md:flex-col md:h-screen">
+        <!-- Mobile Header -->
+        <div class="md:hidden bg-[#0f0f0f] border-b border-zinc-800/50 p-3 flex items-center justify-between flex-shrink-0">
+            <button onclick="toggleSidebar()" class="text-zinc-400 hover:text-white transition p-2 -ml-2">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <h1 class="text-white font-semibold text-base">Qwen Coder</h1>
+            <div id="status-indicator" class="flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full bg-zinc-600" id="status-dot"></div>
+            </div>
+        </div>
+
+        <!-- Chat Window -->
+        <div id="chat-window" class="flex-1 overflow-y-auto px-4 md:px-6 scroll-smooth">
+            <!-- Welcome Screen -->
+            <div class="max-w-3xl mx-auto h-full flex items-center justify-center">
+                <div class="text-center px-4 -mt-20">
+                    <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl mb-6 shadow-lg">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                            <polyline points="16 18 22 12 16 6"></polyline>
+                            <polyline points="8 6 2 12 8 18"></polyline>
+                        </svg>
+                    </div>
+                    <h2 class="text-3xl md:text-4xl font-semibold text-white mb-3 tracking-tight">Qwen Coder Studio</h2>
+                    <p class="text-zinc-400 text-base md:text-lg mb-2">Ask me anything about coding and development</p>
+                    <p class="text-zinc-600 text-sm">Model: <span class="text-zinc-400 font-medium" id="welcome-model">Loading...</span></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="input-container p-3 md:p-6 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/98 to-transparent">
+            <div class="max-w-3xl mx-auto">
+                <div class="flex items-end gap-2 bg-[#1a1a1a] border border-zinc-800/80 rounded-2xl p-2 md:p-2.5 shadow-2xl hover:border-zinc-700/80 transition-colors">
+                    <textarea 
+                        id="user-input" 
+                        rows="1" 
+                        class="flex-1 bg-transparent outline-none px-2 md:px-3 py-2.5 md:py-3 resize-none text-[16px] md:text-[15px] placeholder-zinc-500 max-h-40 leading-relaxed" 
+                        placeholder="Message Qwen..."
+                        onkeydown="handleKeyPress(event)"
+                        autocomplete="off"
+                        autocorrect="off"
+                        autocapitalize="off"
+                        spellcheck="false"></textarea>
+                    <button 
+                        onclick="sendMessage()" 
+                        class="bg-white hover:bg-zinc-100 active:bg-zinc-200 text-black p-3 md:p-2.5 rounded-xl transition-all shrink-0 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95" 
+                        id="send-btn"
+                        aria-label="Send message">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="m5 12 7-7 7 7"/>
+                            <path d="M12 19V5"/>
+                        </svg>
+                    </button>
+                </div>
+                <p class="text-center text-xs text-zinc-600 mt-3 hidden md:block">Qwen can make mistakes. Check important info.</p>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let currentChatId = Date.now();
+        let history = {};
+        let isGenerating = false;
+        let currentModel = 'qwen2.5-coder:1.5b';
+        let availableModels = [];
+
+        // Mobile viewport height fix
+        function setViewportHeight() {
+            const vh = window.innerHeight * 0.01;
+            document.documentElement.style.setProperty('--vh', `${vh}px`);
+        }
+
+        // Set initial viewport height
+        setViewportHeight();
+
+        // Update on resize and orientation change
+        window.addEventListener('resize', setViewportHeight);
+        window.addEventListener('orientationchange', setViewportHeight);
+
+        // Prevent body scroll when keyboard is open on mobile
+        if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+            const textarea = document.getElementById('user-input');
+            
+            textarea.addEventListener('focus', function() {
+                setTimeout(() => {
+                    this.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 300);
+            });
+        }
+
+        // Load available models from server
+        async function loadModels() {
+            const select = document.getElementById('model-select');
+            const welcomeModel = document.getElementById('welcome-model');
+            
+            try {
+                const res = await fetch('/api/models');
+                if (res.ok) {
+                    const data = await res.json();
+                    availableModels = data.models;
+                    
+                    // Populate dropdown
+                    select.innerHTML = availableModels.map(m => 
+                        `<option value="${m.name}">${m.name}</option>`
+                    ).join('');
+                    
+                    // Set default if available
+                    if (availableModels.length > 0) {
+                        currentModel = availableModels[0].name;
+                        select.value = currentModel;
+                        if (welcomeModel) welcomeModel.textContent = currentModel;
+                    }
+                } else {
+                    // Fallback to predefined list
+                    select.innerHTML = `
+                        <option value="qwen2.5-coder:1.5b">qwen2.5-coder:1.5b</option>
+                        <option value="qwen3:0.6b">qwen3:0.6b</option>
+                        <option value="qwen2.5-coder:7b">qwen2.5-coder:7b</option>
+                        <option value="codellama:7b">codellama:7b</option>
+                    `;
+                    currentModel = 'qwen2.5-coder:1.5b';
+                    if (welcomeModel) welcomeModel.textContent = currentModel;
+                }
+            } catch (e) {
+                console.error('Error loading models:', e);
+                // Fallback list
+                select.innerHTML = `
+                    <option value="qwen2.5-coder:1.5b">qwen2.5-coder:1.5b</option>
+                    <option value="qwen3:0.6b">qwen3:0.6b</option>
+                `;
+                if (welcomeModel) welcomeModel.textContent = 'qwen2.5-coder:1.5b';
+            }
+        }
+
+        // Refresh models list
+        async function refreshModels() {
+            const select = document.getElementById('model-select');
+            select.disabled = true;
+            select.innerHTML = '<option>Refreshing...</option>';
+            await loadModels();
+            select.disabled = false;
+            showNotification('Models refreshed', 'success');
+        }
+
+        // Check server status
+        async function checkStatus() {
+            const statusDot = document.getElementById('status-dot');
+            const statusText = document.getElementById('status-text-desktop');
+            const statusDotDesktop = document.getElementById('status-dot-desktop');
+            
+            try {
+                const res = await fetch('/api/health');
+                const data = await res.json();
+                
+                if (res.ok && data.ollama === 'connected') {
+                    if (statusDot) statusDot.className = 'w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]';
+                    if (statusDotDesktop) statusDotDesktop.className = 'w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]';
+                    if (statusText) {
+                        statusText.textContent = `Online • ${data.modelCount} models`;
+                        statusText.className = 'text-emerald-400 text-xs';
+                    }
+                } else {
+                    throw new Error('Ollama disconnected');
+                }
+            } catch (e) {
+                if (statusDot) statusDot.className = 'w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]';
+                if (statusDotDesktop) statusDotDesktop.className = 'w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]';
+                if (statusText) {
+                    statusText.textContent = 'Offline';
+                    statusText.className = 'text-red-400 text-xs';
+                }
+            }
+        }
+
+        // Initialize
+        loadModels();
+        checkStatus();
+        setInterval(checkStatus, 30000);
+
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            const colors = {
+                success: 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400',
+                error: 'bg-red-500/20 border-red-500/50 text-red-400',
+                info: 'bg-blue-500/20 border-blue-500/50 text-blue-400'
+            };
+            
+            notification.className = `fixed top-4 left-1/2 transform -translate-x-1/2 ${colors[type]} border px-4 py-2.5 rounded-lg shadow-lg text-sm z-50 fade-in font-medium`;
+            notification.innerHTML = `
+                <div class="flex items-center gap-2">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                    </svg>
+                    <span>${message}</span>
+                </div>
+            `;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                notification.style.transform = 'translate(-50%, -10px)';
+                setTimeout(() => notification.remove(), 300);
+            }, 2500);
+        }
+
+        function changeModel() {
+            const select = document.getElementById('model-select');
+            currentModel = select.value;
+            
+            const welcomeModel = document.getElementById('welcome-model');
+            if (welcomeModel) {
+                welcomeModel.textContent = currentModel;
+            }
+            
+            showNotification(`Switched to ${currentModel}`, 'success');
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            sidebar.classList.toggle('open');
+            overlay.classList.toggle('hidden');
+        }
+
+        function createNewChat() {
+            currentChatId = Date.now();
+            const chatWindow = document.getElementById('chat-window');
+            const displayModel = currentModel || 'qwen2.5-coder:1.5b';
+            
+            chatWindow.innerHTML = `
+                <div class="max-w-3xl mx-auto h-full flex items-center justify-center">
+                    <div class="text-center px-4 -mt-20">
+                        <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl mb-6 shadow-lg">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                <polyline points="16 18 22 12 16 6"></polyline>
+                                <polyline points="8 6 2 12 8 18"></polyline>
+                            </svg>
+                        </div>
+                        <h2 class="text-3xl md:text-4xl font-semibold text-white mb-3 tracking-tight">Qwen Coder Studio</h2>
+                        <p class="text-zinc-400 text-base md:text-lg mb-2">Ask me anything about coding and development</p>
+                        <p class="text-zinc-600 text-sm">Model: <span class="text-zinc-400 font-medium">${displayModel}</span></p>
+                    </div>
+                </div>`;
+            document.getElementById('user-input').value = '';
+            document.getElementById('user-input').style.height = 'auto';
+            
+            if (window.innerWidth < 768) {
+                toggleSidebar();
+            }
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        async function sendMessage() {
+            if (isGenerating) return;
+            
+            const input = document.getElementById('user-input');
+            const chatWindow = document.getElementById('chat-window');
+            const sendBtn = document.getElementById('send-btn');
+            const msg = input.value.trim();
+            if (!msg) return;
+
+            isGenerating = true;
+            sendBtn.disabled = true;
+
+            // Clear welcome screen
+            if (chatWindow.querySelector('.text-center')) {
+                chatWindow.innerHTML = '<div class="py-8"></div>';
+            }
+
+            // Update sidebar
+            if (!history[currentChatId]) {
+                history[currentChatId] = msg.substring(0, 30) + (msg.length > 30 ? '...' : '');
+                updateSidebar();
+            }
+
+            // User Message
+            const userMsg = document.createElement('div');
+            userMsg.className = "max-w-3xl mx-auto py-6 message-bubble";
+            userMsg.innerHTML = `
+                <div class="flex gap-3 md:gap-4 items-start px-2 md:px-4">
+                    <div class="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-sm font-medium shadow-lg">
+                        U
+                    </div>
+                    <div class="flex-1 pt-1">
+                        <div class="text-[15px] md:text-[15px] text-zinc-100 leading-relaxed break-words">${escapeHtml(msg)}</div>
+                    </div>
+                </div>`;
+            chatWindow.appendChild(userMsg);
+            
+            input.value = '';
+            input.style.height = 'auto';
+
+            // AI Message
+            const aiMsg = document.createElement('div');
+            aiMsg.className = "max-w-3xl mx-auto py-6 border-t border-zinc-800/30 message-bubble";
+            aiMsg.innerHTML = `
+                <div class="flex gap-3 md:gap-4 items-start px-2 md:px-4">
+                    <div class="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-purple-500 to-purple-600 rounded-full flex items-center justify-center text-white text-sm font-medium shadow-lg">
+                        Q
+                    </div>
+                    <div class="flex-1 pt-1">
+                        <div class="ai-content text-[15px] md:text-[15px] text-zinc-200 leading-relaxed">
+                            <div class="flex items-center gap-2 text-zinc-500">
+                                <div class="loading-dot">●</div>
+                                <div class="loading-dot">●</div>
+                                <div class="loading-dot">●</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            chatWindow.appendChild(aiMsg);
+            const contentDiv = aiMsg.querySelector('.ai-content');
+
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+
+            try {
+                const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        message: msg, 
+                        chatId: currentChatId,
+                        model: currentModel 
+                    })
+                });
+
+                if (!res.ok) {
+                    throw new Error(`Server error: ${res.status}`);
+                }
+
+                if (!res.body) {
+                    throw new Error('No response body');
+                }
+
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                let fullText = "";
+                let hasData = false;
+
+                contentDiv.innerHTML = "";
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    hasData = true;
+                    const chunk = decoder.decode(value, { stream: true });
+                    fullText += chunk;
+                    contentDiv.innerHTML = parseMarkdown(fullText);
+                    chatWindow.scrollTop = chatWindow.scrollHeight;
+                }
+
+                if (!hasData || fullText.trim() === "") {
+                    contentDiv.innerHTML = `<div class="flex items-center gap-2 text-yellow-400"><svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg><span>No response. Please try again.</span></div>`;
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                
+                let errorMsg = "";
+                if (error.message.includes('Failed to fetch')) {
+                    errorMsg = `<div class="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+                        <div class="flex items-center gap-2 text-red-400 font-medium mb-2">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                            Connection Error
+                        </div>
+                        <p class="text-sm text-red-300">Cannot connect to server. Ensure the server is running.</p>
+                    </div>`;
+                } else {
+                    errorMsg = `<div class="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+                        <div class="flex items-center gap-2 text-red-400 font-medium mb-2">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            Error
+                        </div>
+                        <p class="text-sm text-red-300">${escapeHtml(error.message)}</p>
+                    </div>`;
+                }
+                
+                contentDiv.innerHTML = errorMsg;
+            } finally {
+                isGenerating = false;
+                sendBtn.disabled = false;
+                input.focus();
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function parseMarkdown(text) {
+            text = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            
+            // Code blocks
+            text = text.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
+                const language = lang || 'code';
+                return `<div class="code-container">
+                    <div class="code-header">
+                        <span class="text-xs text-zinc-400 font-medium">${language}</span>
+                        <button class="copy-btn" onclick="copyCode(this)">Copy code</button>
+                    </div>
+                    <pre><code>${code.trim()}</code></pre>
+                </div>`;
+            });
+            
+            // Inline code
+            text = text.replace(/`([^`]+)`/g, '<code class="bg-zinc-800/80 border border-zinc-700/50 px-1.5 py-0.5 rounded text-[13px] text-zinc-100 font-mono">$1</code>');
+            
+            // Bold
+            text = text.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-semibold text-white">$1</strong>');
+            
+            // Italic
+            text = text.replace(/\*([^*]+)\*/g, '<em class="italic">$1</em>');
+            
+            // Headers
+            text = text.replace(/^### (.+)$/gm, '<h3 class="text-lg font-semibold text-white mt-4 mb-2">$1</h3>');
+            text = text.replace(/^## (.+)$/gm, '<h2 class="text-xl font-semibold text-white mt-6 mb-3">$1</h2>');
+            text = text.replace(/^# (.+)$/gm, '<h1 class="text-2xl font-bold text-white mt-6 mb-4">$1</h1>');
+            
+            // Line breaks
+            text = text.replace(/\n/g, '<br>');
+            
+            return text;
+        }
+
+        function copyCode(btn) {
+            const code = btn.closest('.code-container').querySelector('pre').innerText;
+            navigator.clipboard.writeText(code).then(() => {
+                const original = btn.innerHTML;
+                btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> Copied!';
+                btn.classList.add('text-emerald-400', 'border-emerald-500/50');
+                
+                setTimeout(() => {
+                    btn.innerHTML = original;
+                    btn.classList.remove('text-emerald-400', 'border-emerald-500/50');
+                }, 2000);
+            }).catch(err => {
+                console.error('Copy failed:', err);
+                showNotification('Copy failed', 'error');
+            });
+        }
+
+        function updateSidebar() {
+            const list = document.getElementById('chat-list');
+            list.innerHTML = Object.keys(history).reverse().map(id => `
+                <div class="text-sm p-2.5 hover:bg-zinc-800/50 rounded-lg cursor-pointer truncate text-zinc-400 hover:text-white transition-all ${id == currentChatId ? 'bg-zinc-800/50 text-white' : ''}" onclick="switchChat(${id})">
+                    <div class="flex items-center gap-2">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="flex-shrink-0 opacity-50">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                        </svg>
+                        <span class="truncate">${escapeHtml(history[id])}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function switchChat(chatId) {
+            currentChatId = chatId;
+            if (window.innerWidth < 768) {
+                toggleSidebar();
+            }
+        }
+
+        // Auto-resize textarea
+        const textarea = document.getElementById('user-input');
+        textarea.addEventListener('input', function() {
+            this.style.height = 'auto';
+            const newHeight = Math.min(this.scrollHeight, 160);
+            this.style.height = newHeight + 'px';
+        });
+    </script>
+</body>
+</html>
