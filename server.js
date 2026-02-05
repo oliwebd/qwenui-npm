@@ -4,6 +4,7 @@ import { cors } from 'hono/cors'
 import { readFileSync } from 'fs'
 import { stream } from 'hono/streaming'
 import ollama from 'ollama'
+import { serveStatic } from '@hono/node-server/serve-static'
 
 const app = new Hono()
 
@@ -24,6 +25,12 @@ app.get('/', (c) => {
         return c.text('Error loading index.html: ' + e.message, 500)
     }
 })
+
+app.use('/static/*', serveStatic({ root: './' })) 
+// Or just serve the specific files if they are in the root
+app.get('/app.js', serveStatic({ path: './app.js' }))
+app.get('/styles.css', serveStatic({ path: './styles.css' }))
+
 
 // Health check endpoint with Ollama connectivity check
 app.get('/api/health', async (c) => {
