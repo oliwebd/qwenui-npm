@@ -2,79 +2,62 @@
 
 This document is designed to help AI agents understand the Qwen Studio codebase, its architecture, and development patterns.
 
-## 📂 Project Structure
+## 📂 Project Structure (Flattened)
 
 ```
 /
-├── server.js              # Backend entry point (Hono server)
-├── package.json           # Root package configuration
-├── client/                # Frontend application (React + Vite)
-│   ├── src/
-│   │   ├── components/    # UI Components
-│   │   │   ├── App.tsx          # Main layout orchestrator
-│   │   │   ├── ChatWindow.tsx   # Message list & welcome screen
-│   │   │   ├── InputArea.tsx    # User input & model selector
-│   │   │   ├── Message.tsx      # Individual message render & stats
-│   │   │   ├── Sidebar.tsx      # History, models, & settings
-│   │   │   └── MobileHeader.tsx # Mobile navigation
-│   │   ├── hooks/         # Custom React Hooks
-│   │   │   ├── useChat.ts       # Chat logic, streaming, & IDB sync
-│   │   │   ├── useModels.ts     # Model fetching & status
-│   │   │   └── useTheme.ts      # Theme management
-│   │   ├── utils/         # Utilities
-│   │   │   ├── db.ts            # IndexedDB wrapper (idb)
-│   │   │   └── markdown.ts      # Markdown parsing
-│   │   ├── types/         # TypeScript definitions
-│   │   └── main.tsx       # Entry point
-│   ├── index.html         # HTML entry with font preconnects
-│   └── vite.config.ts     # Vite config (Proxy, PWA)
-└── ...
+├── src/
+│   ├── components/    # UI Components
+│   │   ├── App.tsx          # Main layout orchestrator
+│   │   ├── ChatWindow.tsx   # Message list & welcome screen
+│   │   ├── InputArea.tsx    # User input & model selector
+│   │   ├── Message.tsx      # Individual message render & stats
+│   │   ├── Sidebar.tsx      # History, models, & settings
+│   │   └── MobileHeader.tsx # Mobile navigation
+│   ├── hooks/         # Custom React Hooks
+│   │   ├── useChat.ts       # Chat logic, streaming, & IDB sync
+│   │   ├── useModels.ts     # Model fetching & status
+│   │   └── useTheme.ts      # Theme management
+│   ├── utils/         # Utilities
+│   │   ├── db.ts            # IndexedDB wrapper (idb)
+│   │   └── markdown.ts      # Markdown parsing
+│   ├── types/         # TypeScript definitions
+│   └── main.tsx       # Entry point
+├── public/            # Static assets
+├── index.html         # HTML entry point
+├── package.json       # Project configuration (Vite scripts)
+├── vite.config.ts     # Vite config (Proxy to Ollama, PWA)
+├── tsconfig.json      # TypeScript configuration
+└── AGENTS.md          # This document
 ```
 
 ## 🏗️ State Management
 
 -   **Chat State**: Managed in `useChat.ts`.
-    -   `messages`: Array of `Message` objects (content, role, stats).
-    -   `isGenerating`: Boolean flag for active streams.
-    -   `chatHistory`: Object mapping IDs to titles.
-    -   **Persistence**: Handled by `utils/db.ts` (IndexedDB) via side-effects in `useChat`.
+    -   `messages`: Array of `Message` objects.
+    -   `isGenerating`: Flag for active streams.
+    -   `chatHistory`: Local history map.
+    -   **Persistence**: Handled by `utils/db.ts` (IndexedDB).
 -   **Theme State**: Managed in `useTheme.ts`, persisted in `localStorage`.
--   **Model State**: Managed in `useModels.ts`, fetches from backend `/api/models`.
+-   **Model State**: Managed in `useModels.ts`, fetches directly from Ollama `/api/tags` via proxy.
 
 ## 🔄 Data Flow
 
 1.  **User Input**: `InputArea` captures text -> calls `sendMessage` in `useChat`.
-2.  **API Call**: `sendMessage` POSTs to `/api/chat` (proxied to backend).
-3.  **Streaming**: Backend streams response chunks.
-    -   **Content**: Text chunks appended to `fullText`.
-    -   **Stats**: Final chunk contains `__STATS__{json}` delimiter.
-4.  **Rendering**: `useChat` updates `messages` state -> `ChatWindow` -> `Message` renders markdown & stats.
-5.  **Storage**: `useChat` triggers `saveChat` in `db.ts` on message updates.
-
-## 🛠️ Key Components & logic
-
-### `useChat.ts`
-The core logic engine. It handles:
--   `sendMessage`: Initiates fetch stream.
--   Stream Reading: Decodes chunks, handles `__STATS__` parsing.
--   `AbortController`: Handles stop generation.
--   `optimistic updates`: Immediately shows user message and empty AI loader.
-
-### `server.js`
-A lightweight Hono server acting as a proxy/middleware.
--   **Streaming Response**: Uses `stream` helper from Hono.
--   **Stats Calculation**: Calculates duration and tokens from Ollama's final response part.
--   **Protocol**: Appends metadata via `__STATS__` delimiter.
+2.  **Ollama Request**: `sendMessage` POSTs to `/api/chat`.
+    -   Vite proxy forwards `/api/*` to `http://localhost:11434/api/*`.
+3.  **Streaming**: Response is read as an NDJSON stream.
+4.  **Parsing**: Each line is parsed as JSON; content is appended to message state.
+5.  **Metrics**: Final JSON chunk (`done: true`) contains generation stats.
 
 ## 🎨 Styling
 
--   **Tailwind CSS v4**: Imported in `index.css`.
--   **Theme Variables**: Uses CSS variables for some base colors but mostly Tailwind utility classes with `dark:` modifiers.
--   **Typography**: Inter font via Google Fonts (loaded in `index.html`).
--   **Icons**: `lucide-react`.
+-   **Tailwind CSS v4**: Core styling framework.
+-   **index.css**: Contains global resets and standard CSS for animations/scrollbars to avoid IDE warnings.
+-   **Themes**: Toggleable light/dark modes.
 
-## 🧠 Context for Modifications
+## 🧠 Development Tips
 
--   **Adding Features**: Always verify if a new feature needs persistence (add to `db.ts`) or API support (update `server.js`).
--   **UI Changes**: Respect the glassmorphism/gradient aesthetic. Use `slate` colors for neutrals and `indigo/purple` for accents.
--   **Type Safety**: Always update `types/index.ts` when changing data structures.
+-   **Direct Ollama usage**: No separate backend server is needed.
+-   **Flattened structure**: All source code is in `src/`.
+-   **Vite Proxy**: Ensure Ollama is running on port 11434 if using the default proxy settings.
